@@ -116,7 +116,7 @@ Mistral closes most of the quality gap at zero cost — a meaningful tradeoff fo
 **Prerequisites:** Python 3.11+, and free-tier accounts at [OpenAI](https://platform.openai.com), [Cohere](https://cohere.com), and [Langfuse](https://cloud.langfuse.com).
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ledgerlens
+git clone https://github.com/lizathulya/LedgerLens
 cd ledgerlens
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
