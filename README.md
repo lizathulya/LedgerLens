@@ -1,136 +1,184 @@
 # LedgerLens
-> Ask questions across SEC filings. Get cited answers. Watch quality metrics live.
-What it does
-LedgerLens lets you ask plain-English questions across SEC 10-K and 10-Q filings and get answers grounded strictly in the source documents — with section-level citations, live latency metrics, and automatic quality scoring on every query.
-Example questions you can ask:
 
-"What risks does Apple cite related to its China operations?"
-"Compare how Apple, Microsoft, and Nvidia describe their AI strategy"
-"How has Tesla's gross margin trended across their last four quarters?"
+Ask plain-English questions across SEC filings. Get answers cited to the exact section they came from. Watch quality metrics update in real time.
 
+![Eval gate](https://github.com/YOUR_USERNAME/ledgerlens/actions/workflows/eval.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-Architecture
-SEC EDGAR API
-     │
-     ▼
-┌─────────────────────────────────────────────────────┐
-│  Ingestion pipeline                                  │
-│  Clone filings → chunk → embed → BM25 + ChromaDB    │
-└──────────────────────────┬──────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────┐
-│  Query pipeline                                      │
-│  Hybrid retrieval (BM25 + vector) → RRF fusion       │
-│  → Cohere rerank → GPT-4o cited answer              │
-└──────────────────────────┬──────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────┐
-│  Observability layer                                 │
-│  Langfuse tracing · Ragas evals · SQLite metrics    │
-│  CI quality gate (GitHub Actions)                   │
-└──────────────────────────┬──────────────────────────┘
-                           │
-                           ▼
-              FastAPI + streaming UI
+![LedgerLens demo](docs/demo.gif)
 
-Key features
-FeatureDetailHybrid retrievalBM25 keyword + vector search fused with Reciprocal Rank FusionCross-encoder rerankingCohere rerank-english-v3.0 selects top 5 from 25 candidatesCitation enforcementEvery claim linked to filing, year, and section headingLive observabilityp50/p95 latency, cost per query, Ragas quality scoresCI quality gateGitHub Actions fails PRs where faithfulness drops below 0.80Multi-ticker compareAsk the same question across up to 4 tickers in parallelHuman feedbackThumbs up/down logged to Langfuse alongside automated evalsLocal modeSwap to Ollama (Mistral/Llama 3.2) — zero API cost, zero data leaving your machine
+---
 
-Model benchmark
-Retrieval pipeline is identical across all three runs. Only the generation model changes.
-Tested on Apple 10-K 2024, question: "What are the main risks Apple cites related to competition?"
-ModelFaithfulnessAnswer relevancyLatencyEst. cost/queryGPT-4o (cloud)0.940.914.2s$0.0031Mistral 7B (local)0.810.796.8s$0.00Llama 3.2 3B (local)0.740.713.1s$0.00Phi-3 Mini (local)0.700.682.4s$0.00
+## The problem it solves
 
-Faithfulness and answer relevancy scored by Ragas.
-Local models run on Apple M2 Pro, 16 GB RAM via Ollama.
+SEC filings are dense. A single Apple 10-K runs to 80,000+ words. Finding what management actually said about a specific risk, segment, or strategic bet means reading for hours — or trusting a summary that may have missed something.
 
-Takeaway: GPT-4o leads on quality. Mistral 7B gets within ~13 points at zero cost — a strong tradeoff for privacy-sensitive deployments.
+LedgerLens lets you ask the question directly and get an answer grounded in the exact filing text, with citations you can verify.
 
-Stack
-LayerToolEmbeddingsOpenAI text-embedding-3-small / nomic-embed-text (local)Vector storeChromaDBKeyword searchrank-bm25RerankerCohere Rerank v3GenerationGPT-4o / Mistral / Llama 3.2 (via Ollama)TracingLangfuseEvalsRagasAPIFastAPI + SSE streamingCIGitHub Actions
+---
 
-Quickstart
-Prerequisites
+## What you can do with it
 
-Python 3.11+
-OpenAI API key — platform.openai.com
-Cohere API key (free tier) — cohere.com
-Langfuse keys (free tier) — cloud.langfuse.com
+**Single company Q&A**
+Ask anything about a company's filings and get a cited answer:
+> *"What risks does Apple cite related to its China operations?"*
+> → Answer with `[AAPL 10-K 2024 — Item 1A: Risk Factors]` citation
 
-bashgit clone https://github.com/lizathulya/LedgerLens
+**Side-by-side comparison**
+Ask the same question across up to four tickers at once:
+> *"How does each company describe its AI strategy?"*
+> → AAPL, MSFT, and NVDA answers rendered side by side
+
+**Run it fully offline**
+Swap GPT-4o for a local Mistral or Llama model via Ollama. No data leaves your machine.
+
+---
+
+## How retrieval works
+
+Most RAG systems use vector search alone — which misses exact keyword matches. LedgerLens runs two searches in parallel and combines them.
+
+```
+Your question
+    │
+    ├── BM25 keyword search ──► top 20 chunks   (catches exact terms like "EBITDA")
+    └── Vector search       ──► top 20 chunks   (catches semantic matches like "outlook")
+                │
+                ▼
+        Reciprocal Rank Fusion
+        Merges both result sets by rank position,
+        not raw scores (which aren't comparable)
+                │
+                ▼
+        Cohere cross-encoder reranker
+        Re-reads your question + each chunk together
+        Keeps the 5 most relevant
+                │
+                ▼
+        GPT-4o
+        Answers using only the retrieved chunks
+        Refuses if the answer isn't in the context
+```
+
+The result is meaningfully better than vector search alone — especially for financial text, where specific numbers, ratios, and regulatory terms matter.
+
+---
+
+## Observability
+
+Every query is automatically measured and scored. The live sidebar in the UI shows:
+
+- **p50 / p95 latency** — broken down by retrieval, reranking, and LLM
+- **Cost per query** — estimated from token usage
+- **Faithfulness** — does the answer stick to what the chunks actually say?
+- **Answer relevancy** — does the answer address the question that was asked?
+- **Status indicator** — green / amber / red based on rolling quality average
+
+All traces are sent to Langfuse, where you can inspect the full request waterfall for any query.
+
+---
+
+## CI quality gate
+
+A GitHub Actions workflow runs on every push. It asks 5 golden questions, scores the answers with Ragas, and fails the build if quality drops below threshold.
+
+```
+PASSED  test_avg_faithfulness      [ 0.92 >= 0.80 ✓ ]
+PASSED  test_avg_answer_relevancy  [ 0.88 >= 0.75 ✓ ]
+PASSED  test_avg_context_precision [ 0.81 >= 0.60 ✓ ]
+PASSED  test_keyword_grounding
+```
+
+The badge at the top of this README reflects the current state of that check.
+
+---
+
+## Model benchmark
+
+Same retrieval pipeline, same question, different generation model.
+Question: *"What are the main risks Apple cites related to competition?"*
+Hardware: Apple M2 Pro, 16 GB RAM.
+
+| Model | Faithfulness | Answer relevancy | Latency | Cost/query |
+|---|---|---|---|---|
+| GPT-4o | 0.94 | 0.91 | 4.2s | $0.0031 |
+| Mistral 7B (local) | 0.81 | 0.79 | 6.8s | $0.00 |
+| Llama 3.2 3B (local) | 0.74 | 0.71 | 3.1s | $0.00 |
+| Phi-3 Mini (local) | 0.70 | 0.68 | 2.4s | $0.00 |
+
+Mistral closes most of the quality gap at zero cost — a meaningful tradeoff for privacy-sensitive deployments where data can't leave the machine.
+
+---
+
+## Quickstart
+
+**Prerequisites:** Python 3.11+, and free-tier accounts at [OpenAI](https://platform.openai.com), [Cohere](https://cohere.com), and [Langfuse](https://cloud.langfuse.com).
+
+```bash
+git clone https://github.com/YOUR_USERNAME/ledgerlens
 cd ledgerlens
-
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env        # add your API keys
+```
 
-cp .env.example .env
-# fill in your API keys
+Ingest a company's filings (one-time, ~$0.004 for Apple):
 
-# ingest Apple's last 2 annual reports (~3,600 chunks, ~$0.004)
+```bash
 python ingest.py --ticker AAPL
+```
 
-# start the server
+Start the server:
+
+```bash
 uvicorn main:app --reload
-
 # open http://localhost:8000
-Run fully local (no API keys needed)
-bashollama pull mistral
-ollama pull nomic-embed-text
+```
 
+**Run fully local — no API keys needed:**
+
+```bash
+ollama pull mistral && ollama pull nomic-embed-text
 LEDGER_BACKEND=ollama python ingest.py --ticker AAPL
 LEDGER_BACKEND=ollama uvicorn main:app --reload
+```
 
-Run the eval suite
-bashpytest test_evals.py -v
-PASSED  test_evals.py::TestQualityGate::test_avg_faithfulness       [ 0.92 >= 0.80 ✓ ]
-PASSED  test_evals.py::TestQualityGate::test_avg_answer_relevancy    [ 0.88 >= 0.75 ✓ ]
-PASSED  test_evals.py::TestQualityGate::test_avg_context_precision   [ 0.81 >= 0.60 ✓ ]
-PASSED  test_evals.py::TestQualityGate::test_keyword_grounding
+**Run the eval suite:**
 
-Project structure
+```bash
+pytest test_evals.py -v
+```
+
+---
+
+## Stack
+
+| | |
+|---|---|
+| Vector store | ChromaDB |
+| Keyword search | rank-bm25 |
+| Embeddings | OpenAI `text-embedding-3-small` or `nomic-embed-text` (local) |
+| Reranker | Cohere Rerank v3 |
+| Generation | GPT-4o or Mistral / Llama 3.2 via Ollama |
+| Tracing | Langfuse |
+| Evals | Ragas |
+| API | FastAPI with SSE streaming |
+| CI | GitHub Actions |
+
+---
+
+## Project structure
+
+```
 ledgerlens/
-├── main.py            FastAPI app — routes, streaming, compare, feedback
-├── query.py           Hybrid retrieval → rerank → cited generation
-├── observe.py         Langfuse tracing, Ragas evals, SQLite metrics
-├── ingest.py          SEC EDGAR fetch, chunking, embedding, BM25 index
-├── compare.py         Parallel multi-ticker comparison
-├── ollama_backend.py  Local model swap + model benchmark utility
-├── test_query.py      Unit tests — citations, grounding, latency
-├── test_evals.py      Ragas quality gate (runs in CI)
+├── ingest.py          Fetch SEC filings, chunk, embed, build BM25 index
+├── query.py           Hybrid retrieval → rerank → cited answer
+├── observe.py         Langfuse tracing, Ragas evals, SQLite metrics store
+├── compare.py         Run the same question across multiple tickers in parallel
+├── ollama_backend.py  Local model backend + benchmark utility
+├── main.py            FastAPI routes, streaming, feedback endpoints
+├── test_query.py      Unit tests — citations, grounding, latency budget
+├── test_evals.py      Ragas quality gate — runs in CI
 └── static/
-    └── index.html     Chat UI with compare mode and feedback buttons
-
-How retrieval works
-User question
-    │
-    ├──► BM25 keyword search  ──► top 20 chunks
-    │
-    └──► Vector search        ──► top 20 chunks
-                │
-                ▼
-    Reciprocal Rank Fusion (RRF)
-    Combines rankings without score normalisation
-                │
-                ▼
-    Cohere cross-encoder reranker
-    Reads question + chunk together → top 5
-                │
-                ▼
-    GPT-4o / Mistral
-    Cited answer — refuses if answer not in context
-Why hybrid? Vector search finds semantically similar chunks. BM25 finds exact keyword matches. Neither alone is sufficient — a question about "EBITDA margin" needs keyword matching; a question about "management's outlook on AI" needs semantic understanding. RRF combines both without requiring score normalisation.
-
-Observability
-Every query is automatically traced with:
-
-Langfuse — full request waterfall (retrieval → rerank → LLM) with timing
-Ragas — faithfulness, answer relevancy, context precision scored per query
-SQLite — local metrics store for the live dashboard sidebar
-Human feedback — thumbs up/down synced to Langfuse traces
-
-The CI gate (test_evals.py) runs 5 golden Q&A pairs on every PR and fails if average faithfulness drops below 0.80.
-
-License
-MIT
+    └── index.html     Chat UI, compare mode,
