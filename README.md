@@ -1,6 +1,6 @@
 # LedgerLens
 
-Ask plain-English questions across SEC filings and get answers grounded in real financial data — with verifiable citations and live quality metrics.
+Ask plain-English questions across SEC filings and get answers grounded in real financial data with verifiable citations and live quality metrics.
 
 Analyze companies like Apple, Microsoft, or Nvidia in seconds instead of reading 100-page filings.
 
@@ -33,7 +33,7 @@ LedgerLens turns these filings into a **queryable system**, returning answers gr
 ## Why this matters
 
 Financial decisions depend on unstructured, high-stakes data.
-LedgerLens transforms static filings into an interactive system — enabling faster, transparent, and verifiable analysis.
+LedgerLens transforms static filings into an interactive system enabling faster, transparent, and verifiable analysis.
 
 This project demonstrates production-grade AI engineering with:
 
@@ -75,7 +75,7 @@ User question
         Answer with citations
 ```
 
-Hybrid retrieval improves accuracy — especially for financial text where exact terms and semantics both matter.
+Hybrid retrieval improves accuracy especially for financial text where exact terms and semantics both matter.
 
 ---
 
