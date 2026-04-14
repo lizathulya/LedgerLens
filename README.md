@@ -1,150 +1,178 @@
 # LedgerLens
 
-Ask plain-English questions across SEC filings. Get answers cited to the exact section they came from. Watch quality metrics update in real time.
+Ask plain-English questions across SEC filings and get answers grounded in real financial data — with verifiable citations and live quality metrics.
 
-![Eval gate](https://github.com/YOUR_USERNAME/ledgerlens/actions/workflows/eval.yml/badge.svg)
-![Python](https://img.shields.io/badge/python-3.11-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+Analyze companies like Apple, Microsoft, or Nvidia in seconds instead of reading 100-page filings.
 
-![LedgerLens demo](docs/demo.gif)
-
----
-
-## The problem it solves
-
-SEC filings are dense. A single Apple 10-K runs to 80,000+ words. Finding what management actually said about a specific risk, segment, or strategic bet means reading for hours — or trusting a summary that may have missed something.
-
-LedgerLens lets you ask the question directly and get an answer grounded in the exact filing text, with citations you can verify.
+🔗 Live Demo: [add link]
+🎥 Demo: [add GIF]
 
 ---
 
-## What you can do with it
+## The problem
 
-**Single company Q&A**
-Ask anything about a company's filings and get a cited answer:
-> *"What risks does Apple cite related to its China operations?"*
-> → Answer with `[AAPL 10-K 2024 — Item 1A: Risk Factors]` citation
+SEC filings are dense and time-consuming. A single 10-K can exceed 80,000 words. Extracting insights about risks, strategy, or revenue requires hours of manual reading — or relying on summaries that may miss critical details.
 
-**Side-by-side comparison**
-Ask the same question across up to four tickers at once:
-> *"How does each company describe its AI strategy?"*
-> → AAPL, MSFT, and NVDA answers rendered side by side
-
-**Run it fully offline**
-Swap GPT-4o for a local Mistral or Llama model via Ollama. No data leaves your machine.
+LedgerLens turns these filings into a **queryable system**, returning answers grounded in the original text with precise citations.
 
 ---
 
-## How retrieval works
+## What you can do
 
-Most RAG systems use vector search alone — which misses exact keyword matches. LedgerLens runs two searches in parallel and combines them.
+* Ask questions about a company’s filings
+  → *“What risks does Apple cite in China?”*
+
+* Compare companies side-by-side
+  → *“How do AAPL vs NVDA approach AI?”*
+
+* Run fully local
+  → No data leaves your machine (via Ollama)
+
+---
+
+## Why this matters
+
+Financial decisions depend on unstructured, high-stakes data.
+LedgerLens transforms static filings into an interactive system — enabling faster, transparent, and verifiable analysis.
+
+This project demonstrates production-grade AI engineering with:
+
+* hybrid retrieval systems
+* evaluation pipelines
+* real-time observability
+
+---
+
+## Key Features
+
+* Hybrid retrieval (BM25 + vector + reranking)
+* Section-level citations (grounded answers, not hallucinations)
+* Built-in evaluation (Ragas + CI gate)
+* Observability dashboard (latency, cost, quality)
+* Multi-company comparison
+* Optional fully local inference (Ollama)
+
+---
+
+## How it works
 
 ```
-Your question
+User question
     │
-    ├── BM25 keyword search ──► top 20 chunks   (catches exact terms like "EBITDA")
-    └── Vector search       ──► top 20 chunks   (catches semantic matches like "outlook")
+    ├── BM25 keyword search ──► top chunks
+    └── Vector search       ──► top chunks
                 │
                 ▼
         Reciprocal Rank Fusion
-        Merges both result sets by rank position,
-        not raw scores (which aren't comparable)
                 │
                 ▼
-        Cohere cross-encoder reranker
-        Re-reads your question + each chunk together
-        Keeps the 5 most relevant
+        Cross-encoder reranker
                 │
                 ▼
-        GPT-4o
-        Answers using only the retrieved chunks
-        Refuses if the answer isn't in the context
+        LLM (GPT-4o / local model)
+                │
+                ▼
+        Answer with citations
 ```
 
-The result is meaningfully better than vector search alone — especially for financial text, where specific numbers, ratios, and regulatory terms matter.
+Hybrid retrieval improves accuracy — especially for financial text where exact terms and semantics both matter.
 
 ---
 
 ## Observability
 
-Every query is automatically measured and scored. The live sidebar in the UI shows:
+Each query is tracked and evaluated in real time:
 
-- **p50 / p95 latency** — broken down by retrieval, reranking, and LLM
-- **Cost per query** — estimated from token usage
-- **Faithfulness** — does the answer stick to what the chunks actually say?
-- **Answer relevancy** — does the answer address the question that was asked?
-- **Status indicator** — green / amber / red based on rolling quality average
+* Latency (p50 / p95)
+* Cost per query
+* Faithfulness (grounding to source)
+* Answer relevancy
 
-All traces are sent to Langfuse, where you can inspect the full request waterfall for any query.
-
----
-
-## CI quality gate
-
-A GitHub Actions workflow runs on every push. It asks 5 golden questions, scores the answers with Ragas, and fails the build if quality drops below threshold.
-
-```
-PASSED  test_avg_faithfulness      [ 0.92 >= 0.80 ✓ ]
-PASSED  test_avg_answer_relevancy  [ 0.88 >= 0.75 ✓ ]
-PASSED  test_avg_context_precision [ 0.81 >= 0.60 ✓ ]
-PASSED  test_keyword_grounding
-```
-
-The badge at the top of this README reflects the current state of that check.
+All traces are logged with Langfuse for debugging and inspection.
 
 ---
 
-## Model benchmark
+## CI Quality Gate
 
-Same retrieval pipeline, same question, different generation model.
-Question: *"What are the main risks Apple cites related to competition?"*
-Hardware: Apple M2 Pro, 16 GB RAM.
+A GitHub Actions workflow runs evaluation tests on every push.
 
-| Model | Faithfulness | Answer relevancy | Latency | Cost/query |
-|---|---|---|---|---|
-| GPT-4o | 0.94 | 0.91 | 4.2s | $0.0031 |
-| Mistral 7B (local) | 0.81 | 0.79 | 6.8s | $0.00 |
-| Llama 3.2 3B (local) | 0.74 | 0.71 | 3.1s | $0.00 |
-| Phi-3 Mini (local) | 0.70 | 0.68 | 2.4s | $0.00 |
+Example:
 
-Mistral closes most of the quality gap at zero cost — a meaningful tradeoff for privacy-sensitive deployments where data can't leave the machine.
+```
+PASSED  faithfulness ≥ 0.80
+PASSED  answer relevancy ≥ 0.75
+PASSED  context precision ≥ 0.60
+```
+
+This ensures model quality doesn’t degrade over time.
+
+---
+
+## Model Benchmark
+
+| Model           | Faithfulness | Relevancy | Latency | Cost   |
+| --------------- | ------------ | --------- | ------- | ------ |
+| GPT-4o          | 0.94         | 0.91      | 4.2s    | $0.003 |
+| Mistral (local) | 0.81         | 0.79      | 6.8s    | $0.00  |
+| Llama 3.2       | 0.74         | 0.71      | 3.1s    | $0.00  |
+
+Local models trade some quality for zero cost and full privacy.
 
 ---
 
 ## Quickstart
 
-**Prerequisites:** Python 3.11+, and free-tier accounts at [OpenAI](https://platform.openai.com), [Cohere](https://cohere.com), and [Langfuse](https://cloud.langfuse.com).
+### Setup
 
 ```bash
 git clone https://github.com/lizathulya/LedgerLens
 cd ledgerlens
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # add your API keys
+cp .env.example .env
 ```
 
-Ingest a company's filings (one-time, ~$0.004 for Apple):
+Add your API keys:
+
+* OpenAI
+* Cohere
+* Langfuse
+
+---
+
+### Ingest data
 
 ```bash
 python ingest.py --ticker AAPL
 ```
 
-Start the server:
+(~$0.004 cost)
+
+---
+
+### Run the app
 
 ```bash
 uvicorn main:app --reload
-# open http://localhost:8000
 ```
 
-**Run fully local — no API keys needed:**
+Open: http://localhost:8000
+
+---
+
+### Run locally (no API usage)
 
 ```bash
-ollama pull mistral && ollama pull nomic-embed-text
+ollama pull mistral
+ollama pull nomic-embed-text
+
 LEDGER_BACKEND=ollama python ingest.py --ticker AAPL
 LEDGER_BACKEND=ollama uvicorn main:app --reload
 ```
 
-**Run the eval suite:**
+---
+
+### Run evals
 
 ```bash
 pytest test_evals.py -v
@@ -152,33 +180,47 @@ pytest test_evals.py -v
 
 ---
 
-## Stack
+## Tech Stack
 
-| | |
-|---|---|
-| Vector store | ChromaDB |
-| Keyword search | rank-bm25 |
-| Embeddings | OpenAI `text-embedding-3-small` or `nomic-embed-text` (local) |
-| Reranker | Cohere Rerank v3 |
-| Generation | GPT-4o or Mistral / Llama 3.2 via Ollama |
-| Tracing | Langfuse |
-| Evals | Ragas |
-| API | FastAPI with SSE streaming |
-| CI | GitHub Actions |
+* Vector DB: ChromaDB
+* Keyword search: BM25
+* Embeddings: OpenAI / local
+* Reranking: Cohere
+* LLM: GPT-4o / Ollama
+* Backend: FastAPI
+* Observability: Langfuse
+* Evaluation: Ragas
+* CI: GitHub Actions
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
 ledgerlens/
-├── ingest.py          Fetch SEC filings, chunk, embed, build BM25 index
-├── query.py           Hybrid retrieval → rerank → cited answer
-├── observe.py         Langfuse tracing, Ragas evals, SQLite metrics store
-├── compare.py         Run the same question across multiple tickers in parallel
-├── ollama_backend.py  Local model backend + benchmark utility
-├── main.py            FastAPI routes, streaming, feedback endpoints
-├── test_query.py      Unit tests — citations, grounding, latency budget
-├── test_evals.py      Ragas quality gate — runs in CI
+├── ingest.py
+├── query.py
+├── observe.py
+├── compare.py
+├── ollama_backend.py
+├── main.py
+├── test_query.py
+├── test_evals.py
 └── static/
-    └── index.html     Chat UI, compare mode,
+    └── index.html
+```
+
+---
+
+## Future Work
+
+* Agent-based query planning
+* Multi-step financial reasoning
+* Portfolio-level analysis
+* User feedback-driven retraining
+
+---
+
+## License
+
+MIT
