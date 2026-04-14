@@ -11,7 +11,7 @@ Analyze companies like Apple, Microsoft, or Nvidia in seconds instead of reading
 
 ## The problem
 
-SEC filings are dense and time-consuming. A single 10-K can exceed 80,000 words. Extracting insights about risks, strategy, or revenue requires hours of manual reading — or relying on summaries that may miss critical details.
+SEC filings are dense and time-consuming. A single 10-K can exceed 80,000 words. Extracting insights about risks, strategy, or revenue requires hours of manual reading or relying on summaries that may miss critical details.
 
 LedgerLens turns these filings into a **queryable system**, returning answers grounded in the original text with precise citations.
 
